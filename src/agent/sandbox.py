@@ -1,9 +1,10 @@
 """Agent Sandbox — Isolated execution environment for agents."""
 
-import os
 import tempfile
 import resource
-from typing import Dict, Optional
+import shutil
+from contextlib import contextmanager
+from typing import Dict, Iterator, Optional
 from pathlib import Path
 
 
@@ -16,8 +17,10 @@ class ResourceLimits:
 
 class AgentSandbox:
     def __init__(self, base_path: Optional[str] = None):
+        self._owns_base_path = base_path is None
         self.base_path = Path(base_path or tempfile.mkdtemp(prefix="ao_sandbox_"))
         self._sandboxes: Dict[str, Path] = {}
+        self._terminal_outcomes: Dict[str, Dict[str, object]] = {}
 
     def create(self, agent_id: str, limits: Optional[ResourceLimits] = None) -> Path:
         sandbox_path = self.base_path / agent_id
@@ -28,13 +31,34 @@ class AgentSandbox:
     def destroy(self, agent_id: str) -> bool:
         sandbox = self._sandboxes.pop(agent_id, None)
         if sandbox and sandbox.exists():
-            import shutil
             shutil.rmtree(sandbox, ignore_errors=True)
-            return True
-        return False
+        return sandbox is not None and (not sandbox.exists())
 
     def get_path(self, agent_id: str) -> Optional[Path]:
         return self._sandboxes.get(agent_id)
+
+    def get_terminal_outcome(self, agent_id: str) -> Optional[Dict[str, object]]:
+        return self._terminal_outcomes.get(agent_id)
+
+    @contextmanager
+    def managed_run(self, agent_id: str, limits: Optional[ResourceLimits] = None) -> Iterator[Path]:
+        sandbox_path = self.create(agent_id, limits)
+        outcome = "completed"
+        try:
+            yield sandbox_path
+        except BaseException as exc:
+            outcome = "cancelled" if exc.__class__.__name__ == "CancelledError" else "failed"
+            raise
+        finally:
+            removed = self.destroy(agent_id)
+            self._terminal_outcomes.setdefault(
+                agent_id,
+                {
+                    "status": outcome,
+                    "path": str(sandbox_path),
+                    "cleanup_removed": removed,
+                },
+            )
 
     def apply_limits(self, agent_id: str, limits: ResourceLimits) -> None:
         try:
@@ -47,6 +71,8 @@ class AgentSandbox:
     def cleanup_all(self) -> None:
         for agent_id in list(self._sandboxes.keys()):
             self.destroy(agent_id)
+        if self._owns_base_path and self.base_path.exists():
+            shutil.rmtree(self.base_path, ignore_errors=True)
 
 # 2019-01-10T19:56:24 update
 
