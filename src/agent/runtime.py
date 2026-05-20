@@ -13,10 +13,17 @@ RESERVED_CHILD_ENV_KEYS = frozenset(
     {
         "AO_AGENT_ID",
         "AO_AGENT_MODE",
-        "AO_ORCHESTRATION_MODE",
-        "AO_RUNTIME_MODE",
     }
 )
+
+
+def _reserved_child_env_overrides(env: Dict) -> list:
+    reserved_keys = {key.upper() for key in RESERVED_CHILD_ENV_KEYS}
+    return sorted(
+        str(key)
+        for key in env
+        if str(key).upper() in reserved_keys
+    )
 
 
 class RuntimeState(Enum):
@@ -37,12 +44,13 @@ class AgentRuntime:
             logger.warning(f"Agent {agent_id} is already running")
             return False
 
-        reserved_overrides = RESERVED_CHILD_ENV_KEYS.intersection((env or {}).keys())
+        reserved_overrides = _reserved_child_env_overrides(env or {})
         if reserved_overrides:
+            self._states[agent_id] = RuntimeState.STOPPED
             logger.error(
                 "Refusing to start agent %s with reserved environment overrides: %s",
                 agent_id,
-                ", ".join(sorted(reserved_overrides)),
+                ", ".join(reserved_overrides),
             )
             return False
 
@@ -51,6 +59,7 @@ class AgentRuntime:
         if env:
             process_env.update(env)
         process_env["AO_AGENT_ID"] = agent_id
+        process_env["AO_AGENT_MODE"] = "managed"
 
         try:
             proc = subprocess.Popen(
