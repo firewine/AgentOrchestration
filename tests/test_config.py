@@ -43,8 +43,8 @@ class TestConfig:
         assert config.get("feature.visible") is True
 
     def test_env_override_coerces_numeric_values(self, monkeypatch):
-        monkeypatch.setenv("AO_APP_PORT", "8080")
-        monkeypatch.setenv("AO_WORKER_TIMEOUT", "1.5")
+        monkeypatch.setenv("AO_APP_PORT", " 8080 ")
+        monkeypatch.setenv("AO_WORKER_TIMEOUT", " 1.5 ")
 
         config = Config()
 
@@ -67,6 +67,13 @@ class TestConfig:
 
         with pytest.raises(ConfigurationError, match="is not a branch"):
             config.set("app.name", "agent-orchestrator")
+
+    def test_set_nested_rejects_branch_over_scalar_leaf(self):
+        config = Config()
+        config.set("app", "production")
+
+        with pytest.raises(ConfigurationError, match="Cannot replace config value"):
+            config.set("app", {"name": "agent-orchestrator"})
 
 # 2019-02-01T18:58:35 update
 

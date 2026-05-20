@@ -26,17 +26,18 @@ class Config:
                 self._set_nested(config_key, self._parse_env_value(value))
 
     def _parse_env_value(self, value: str) -> Any:
-        normalized = value.strip().lower()
+        stripped = value.strip()
+        normalized = stripped.lower()
         if normalized == "true":
             return True
         if normalized == "false":
             return False
         try:
-            return int(value)
+            return int(stripped)
         except ValueError:
             pass
         try:
-            return float(value)
+            return float(stripped)
         except ValueError:
             return value
 
@@ -51,12 +52,18 @@ class Config:
                     f"Cannot set nested config key '{key}' because '{part}' is not a branch"
                 )
             current = current[part]
-        existing = current.get(parts[-1])
-        if isinstance(existing, dict) and not isinstance(value, dict):
-            raise ConfigurationError(
-                f"Cannot replace config branch '{key}' with a scalar value"
-            )
-        current[parts[-1]] = value
+        leaf_key = parts[-1]
+        if leaf_key in current:
+            existing = current[leaf_key]
+            if isinstance(existing, dict) and not isinstance(value, dict):
+                raise ConfigurationError(
+                    f"Cannot replace config branch '{key}' with a scalar value"
+                )
+            if not isinstance(existing, dict) and isinstance(value, dict):
+                raise ConfigurationError(
+                    f"Cannot replace config value '{key}' with a branch"
+                )
+        current[leaf_key] = value
 
     def get(self, key: str, default: Any = None) -> Any:
         parts = key.split(".")
