@@ -9,6 +9,15 @@ from typing import Dict, Optional
 
 logger = logging.getLogger(__name__)
 
+RESERVED_CHILD_ENV_KEYS = frozenset(
+    {
+        "AO_AGENT_ID",
+        "AO_AGENT_MODE",
+        "AO_ORCHESTRATION_MODE",
+        "AO_RUNTIME_MODE",
+    }
+)
+
 
 class RuntimeState(Enum):
     STOPPED = "stopped"
@@ -26,6 +35,15 @@ class AgentRuntime:
     def start(self, agent_id: str, command: list, env: Optional[Dict] = None) -> bool:
         if agent_id in self._processes and self._processes[agent_id].poll() is None:
             logger.warning(f"Agent {agent_id} is already running")
+            return False
+
+        reserved_overrides = RESERVED_CHILD_ENV_KEYS.intersection((env or {}).keys())
+        if reserved_overrides:
+            logger.error(
+                "Refusing to start agent %s with reserved environment overrides: %s",
+                agent_id,
+                ", ".join(sorted(reserved_overrides)),
+            )
             return False
 
         self._states[agent_id] = RuntimeState.STARTING
