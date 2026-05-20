@@ -1,5 +1,7 @@
 """Agent Sandbox — Isolated execution environment for agents."""
 
+import asyncio
+import concurrent.futures
 import tempfile
 import resource
 import shutil
@@ -29,16 +31,22 @@ class AgentSandbox:
         return sandbox_path
 
     def destroy(self, agent_id: str) -> bool:
-        sandbox = self._sandboxes.pop(agent_id, None)
+        sandbox = self._sandboxes.get(agent_id)
+        if sandbox is None:
+            return False
         if sandbox and sandbox.exists():
-            shutil.rmtree(sandbox, ignore_errors=True)
-        return sandbox is not None and (not sandbox.exists())
+            shutil.rmtree(sandbox)
+        if sandbox.exists():
+            return False
+        self._sandboxes.pop(agent_id, None)
+        return True
 
     def get_path(self, agent_id: str) -> Optional[Path]:
         return self._sandboxes.get(agent_id)
 
     def get_terminal_outcome(self, agent_id: str) -> Optional[Dict[str, object]]:
-        return self._terminal_outcomes.get(agent_id)
+        outcome = self._terminal_outcomes.get(agent_id)
+        return dict(outcome) if outcome is not None else None
 
     @contextmanager
     def managed_run(self, agent_id: str, limits: Optional[ResourceLimits] = None) -> Iterator[Path]:
@@ -46,8 +54,11 @@ class AgentSandbox:
         outcome = "completed"
         try:
             yield sandbox_path
-        except BaseException as exc:
-            outcome = "cancelled" if exc.__class__.__name__ == "CancelledError" else "failed"
+        except (asyncio.CancelledError, concurrent.futures.CancelledError):
+            outcome = "cancelled"
+            raise
+        except BaseException:
+            outcome = "failed"
             raise
         finally:
             removed = self.destroy(agent_id)
@@ -72,7 +83,7 @@ class AgentSandbox:
         for agent_id in list(self._sandboxes.keys()):
             self.destroy(agent_id)
         if self._owns_base_path and self.base_path.exists():
-            shutil.rmtree(self.base_path, ignore_errors=True)
+            shutil.rmtree(self.base_path)
 
 # 2019-01-10T19:56:24 update
 
