@@ -1,5 +1,6 @@
 import pytest
 from src.common.config import Config
+from src.common.errors import ConfigurationError
 
 
 class TestConfig:
@@ -51,6 +52,21 @@ class TestConfig:
         assert isinstance(config.get("app.port"), int)
         assert config.get("worker.timeout") == 1.5
         assert isinstance(config.get("worker.timeout"), float)
+
+    def test_env_override_cannot_replace_config_branch(self, tmp_path, monkeypatch):
+        config_file = tmp_path / "config.json"
+        config_file.write_text('{"app": {"name": "agent-orchestrator"}}')
+        monkeypatch.setenv("AO_APP", "production")
+
+        with pytest.raises(ConfigurationError, match="Cannot replace config branch"):
+            Config(str(config_file))
+
+    def test_set_nested_rejects_scalar_parent(self):
+        config = Config()
+        config.set("app", "production")
+
+        with pytest.raises(ConfigurationError, match="is not a branch"):
+            config.set("app.name", "agent-orchestrator")
 
 # 2019-02-01T18:58:35 update
 

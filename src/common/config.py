@@ -4,6 +4,8 @@ import os
 import json
 from typing import Any, Dict, Optional
 
+from src.common.errors import ConfigurationError
+
 
 class Config:
     def __init__(self, config_path: Optional[str] = None):
@@ -44,7 +46,16 @@ class Config:
         for part in parts[:-1]:
             if part not in current:
                 current[part] = {}
+            elif not isinstance(current[part], dict):
+                raise ConfigurationError(
+                    f"Cannot set nested config key '{key}' because '{part}' is not a branch"
+                )
             current = current[part]
+        existing = current.get(parts[-1])
+        if isinstance(existing, dict) and not isinstance(value, dict):
+            raise ConfigurationError(
+                f"Cannot replace config branch '{key}' with a scalar value"
+            )
         current[parts[-1]] = value
 
     def get(self, key: str, default: Any = None) -> Any:
