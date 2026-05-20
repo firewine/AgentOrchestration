@@ -32,6 +32,26 @@ class TestConfig:
         assert data["key1"] == "value1"
         assert data["key2"] == "value2"
 
+    def test_env_override_coerces_boolean_values(self, monkeypatch):
+        monkeypatch.setenv("AO_FEATURE_ENABLED", "false")
+        monkeypatch.setenv("AO_FEATURE_VISIBLE", "true")
+
+        config = Config()
+
+        assert config.get("feature.enabled") is False
+        assert config.get("feature.visible") is True
+
+    def test_env_override_coerces_numeric_values(self, monkeypatch):
+        monkeypatch.setenv("AO_APP_PORT", "8080")
+        monkeypatch.setenv("AO_WORKER_TIMEOUT", "1.5")
+
+        config = Config()
+
+        assert config.get("app.port") == 8080
+        assert isinstance(config.get("app.port"), int)
+        assert config.get("worker.timeout") == 1.5
+        assert isinstance(config.get("worker.timeout"), float)
+
 # 2019-02-01T18:58:35 update
 
 # 2019-07-31T13:45:15 update
